@@ -49,7 +49,29 @@ if video_url:
                 # Clean up
                 os.remove("output.mp3")
         except Exception as e:
-            st.error(f"Error fetching transcript: {e}")
+            if "Subtitles are disabled" in str(e):
+                st.error("Subtitles are disabled for this video. Please try another video or provide a manual transcript.")
+            else:
+                st.error(f"Error fetching transcript: {e}")
+
+        # Manual Transcript Input
+        st.write("### Manual Transcript Input")
+        manual_text = st.text_area("Paste your transcript here (if subtitles are unavailable):", height=200)
+
+        if manual_text:
+            st.write("### Generating Podcast from Manual Transcript")
+            host_intro = "Welcome to today's podcast. Let's discuss some interesting insights."
+            guest_intro = "Thank you for having me. Here's what we have."
+            conversation = f"Host: {host_intro}\nGuest: {guest_intro}\n{chr(10).join(['Host: What do you think about this part?\nGuest: ' + line for line in manual_text.split('. ')])}"
+            st.text_area("Generated Conversation", conversation, height=300)
+
+            if st.button("Generate Audio from Manual Transcript"):
+                tts = gTTS(conversation, lang='en')
+                tts.save("manual_output.mp3")
+                sound = AudioSegment.from_mp3("manual_output.mp3")
+                sound.export("manual_output.wav", format="wav")
+                st.audio("manual_output.wav", format="audio/wav")
+                st.success("Audio file generated successfully!")
     else:
         st.error("Invalid YouTube URL. Please ensure you have entered a valid URL.")
 
