@@ -1,5 +1,4 @@
 import streamlit as st
-from pytube import YouTube
 from gtts import gTTS
 import os
 from pydub import AudioSegment
@@ -7,10 +6,26 @@ import re
 import requests
 import tempfile
 import openai
+import yt_dlp
 
 # Title and Introduction
 st.title("YouTube Video to Podcast-like Conversation")
 st.markdown("### Convert YouTube videos into podcast-style conversations")
+
+# Function to download audio using yt-dlp
+def download_audio(video_url):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'wav',
+            'preferredquality': '192',
+        }],
+        'outtmpl': '%(id)s.%(ext)s',
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(video_url, download=True)
+        return f"{info['id']}.wav"
 
 # Input Section
 video_url = st.text_input("Enter YouTube Video URL")
@@ -23,20 +38,11 @@ if video_url:
         # Download audio from YouTube
         try:
             st.write("Downloading audio from YouTube...")
-            yt = YouTube(video_url)
-            audio_stream = yt.streams.filter(only_audio=True).first()
-            temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-            audio_stream.download(output_path=os.path.dirname(temp_audio_file.name), filename=os.path.basename(temp_audio_file.name))
-
-            # Convert to WAV
-            st.write("Converting audio to WAV format...")
-            audio = AudioSegment.from_file(temp_audio_file.name)
-            temp_wav_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-            audio.export(temp_wav_file.name, format="wav")
+            temp_wav_file = download_audio(video_url)
 
             # Transcribe audio using OpenAI Whisper API
             st.write("Transcribing audio using Whisper API...")
-            with open(temp_wav_file.name, "rb") as audio_file:
+            with open(temp_wav_file, "rb") as audio_file:
                 response = openai.Audio.transcribe("whisper-1", audio_file)
 
             transcript = response["text"]
@@ -66,6 +72,7 @@ if video_url:
 
                 # Clean up
                 os.remove("output.mp3")
+                os.remove(temp_wav_file)
         except Exception as e:
             st.error(f"An error occurred: {e}")
     else:
