@@ -1,5 +1,5 @@
 streamlit
-youtube-transcript-api
+pytube
 gtts
 pydub
-pillow
+openai
