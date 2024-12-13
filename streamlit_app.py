@@ -1,9 +1,12 @@
 import streamlit as st
-from youtube_transcript_api import YouTubeTranscriptApi
+from pytube import YouTube
 from gtts import gTTS
 import os
 from pydub import AudioSegment
 import re
+import requests
+import tempfile
+import openai
 
 # Title and Introduction
 st.title("YouTube Video to Podcast-like Conversation")
@@ -17,20 +20,35 @@ if video_url:
     video_id = match.group(1) if match else None
 
     if video_id:
-        # Fetch transcript
-        st.write("Fetching transcript...")
+        # Download audio from YouTube
         try:
-            transcript = YouTubeTranscriptApi.get_transcript(video_id)
-            text = " ".join([item['text'] for item in transcript])
+            st.write("Downloading audio from YouTube...")
+            yt = YouTube(video_url)
+            audio_stream = yt.streams.filter(only_audio=True).first()
+            temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+            audio_stream.download(output_path=os.path.dirname(temp_audio_file.name), filename=os.path.basename(temp_audio_file.name))
+
+            # Convert to WAV
+            st.write("Converting audio to WAV format...")
+            audio = AudioSegment.from_file(temp_audio_file.name)
+            temp_wav_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
+            audio.export(temp_wav_file.name, format="wav")
+
+            # Transcribe audio using OpenAI Whisper API
+            st.write("Transcribing audio using Whisper API...")
+            with open(temp_wav_file.name, "rb") as audio_file:
+                response = openai.Audio.transcribe("whisper-1", audio_file)
+
+            transcript = response["text"]
             st.write("### Transcript:")
-            st.text_area("Transcript", text, height=200)
+            st.text_area("Transcript", transcript, height=200)
 
             # Generate podcast-like conversation
             st.write("### Generate Podcast")
             host_intro = "Welcome to today's podcast. Let's discuss some interesting insights from the video."
-            guest_intro = "Thank you for having me. Here's what we have."        
+            guest_intro = "Thank you for having me. Here's what we have."
 
-            conversation = f"Host: {host_intro}\nGuest: {guest_intro}\n{chr(10).join(['Host: What do you think about this part?\nGuest: ' + line for line in text.split('. ')])}"
+            conversation = f"Host: {host_intro}\nGuest: {guest_intro}\n{chr(10).join(['Host: What do you think about this part?\nGuest: ' + line for line in transcript.split('. ')])}"
 
             st.text_area("Generated Conversation", conversation, height=300)
 
@@ -49,29 +67,7 @@ if video_url:
                 # Clean up
                 os.remove("output.mp3")
         except Exception as e:
-            if "Subtitles are disabled" in str(e):
-                st.error("Subtitles are disabled for this video. Please try another video or provide a manual transcript.")
-            else:
-                st.error(f"Error fetching transcript: {e}")
-
-        # Manual Transcript Input
-        st.write("### Manual Transcript Input")
-        manual_text = st.text_area("Paste your transcript here (if subtitles are unavailable):", height=200)
-
-        if manual_text:
-            st.write("### Generating Podcast from Manual Transcript")
-            host_intro = "Welcome to today's podcast. Let's discuss some interesting insights."
-            guest_intro = "Thank you for having me. Here's what we have."
-            conversation = f"Host: {host_intro}\nGuest: {guest_intro}\n{chr(10).join(['Host: What do you think about this part?\nGuest: ' + line for line in manual_text.split('. ')])}"
-            st.text_area("Generated Conversation", conversation, height=300)
-
-            if st.button("Generate Audio from Manual Transcript"):
-                tts = gTTS(conversation, lang='en')
-                tts.save("manual_output.mp3")
-                sound = AudioSegment.from_mp3("manual_output.mp3")
-                sound.export("manual_output.wav", format="wav")
-                st.audio("manual_output.wav", format="audio/wav")
-                st.success("Audio file generated successfully!")
+            st.error(f"An error occurred: {e}")
     else:
         st.error("Invalid YouTube URL. Please ensure you have entered a valid URL.")
 
