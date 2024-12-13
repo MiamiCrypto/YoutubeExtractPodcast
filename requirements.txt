@@ -1,5 +1,5 @@
-streamlit==1.26.0
-pandas
-numpy
-scikit-learn
-matplotlib
+streamlit
+youtube-transcript-api
+gtts
+pydub
+pillow
